@@ -1,6 +1,7 @@
 package com.example.yanhang.wifibrowser;
 
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -9,13 +10,20 @@ import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
+import android.support.annotation.StringRes;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 
 import android.util.Log;
+import android.view.KeyEvent;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.SubMenu;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
@@ -94,6 +102,25 @@ public class MainActivity extends AppCompatActivity {
         scanner_ = new PeriodicScan(this, scanner_callback);
         scan_receiver_ref_ = scanner_.getBroadcastReceiver();
         wifi_manager_ref_ = scanner_.getWifiManager();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu){
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.option_menu, menu);
+        return true;
+    }
+
+    public void onMenu1Clicked(MenuItem item){
+        if(item.isChecked()){
+            Toast.makeText(MainActivity.this, "Info hidden", Toast.LENGTH_SHORT).show();
+            info_textview_.setVisibility(View.GONE);
+            item.setChecked(false);
+        }else{
+            Toast.makeText(MainActivity.this, "Info shown", Toast.LENGTH_SHORT).show();
+            info_textview_.setVisibility(View.VISIBLE);
+            item.setChecked(true);
+        }
     }
 
     private void initializeWifi(){
