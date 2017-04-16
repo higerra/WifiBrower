@@ -7,11 +7,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
-import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
-import android.os.Looper;
-import android.support.annotation.BoolRes;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
@@ -30,6 +27,7 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -41,7 +39,9 @@ public class MainActivity extends AppCompatActivity {
     Button btn_add_;
     TextView info_textview_;
 
-    WifiManager wifi_manager_;
+    private PeriodicScan scanner_;
+    private WifiManager wifi_manager_ref_;
+    private BroadcastReceiver scan_receiver_ref_;
 
     boolean perm_access_wifi_ = false;
     boolean perm_change_wifi_ = false;
@@ -53,25 +53,16 @@ public class MainActivity extends AppCompatActivity {
     final static int REQUEST_CODE_COARSE_LOCATION = 1003;
     final static int REQUEST_CODE_INTERNET = 1004;
 
+    ArrayList<String> wifi_info_list_ = new ArrayList<>();
     final static String LOG_TAG = "WifiBrowser";
-    final static int scan_interval_ = 3000;
-
-    private final Handler mScanHandler = new Handler();
-
-    private Runnable scan_runnable_;
-
-    private BroadcastReceiver scan_receiver_;
-    private ArrayList<String> wifi_info_list_;
 
     AtomicBoolean is_scanning_ = new AtomicBoolean(false);
-    private int scan_counter_ = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        wifi_info_list_ = new ArrayList<>();
         adapter_ = new ArrayAdapter<>(this, R.layout.list_row_item,
                 R.id.list_item, wifi_info_list_);
 
@@ -81,74 +72,53 @@ public class MainActivity extends AppCompatActivity {
         btn_add_ = (Button)findViewById(R.id.btn_add);
         info_textview_ = (TextView)findViewById(R.id.text_info);
 
-        // configure wifi
-        wifi_manager_ = (WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        scan_receiver_ = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if(is_scanning_.get()) {
-                    List<ScanResult> cur_result = wifi_manager_.getScanResults();
-                    wifi_info_list_.clear();
-                    for (ScanResult res : cur_result) {
-                        StringBuilder builder = new StringBuilder();
-                        builder.append(wifi_info_list_.size()).append('\t');
-                        builder.append(scan_counter_).append('\t');
-                        builder.append(res.timestamp).append('\t');
-                        builder.append(res.SSID).append('\t');
-                        builder.append(res.BSSID).append('\t');
-                        builder.append(res.level).append(" dB");
-                        wifi_info_list_.add(builder.toString());
-                    }
-                    adapter_.notifyDataSetChanged();
-                }
-            }
-        };
-
-        scan_runnable_ = new Runnable() {
+        Runnable scanner_callback = new Runnable() {
             @Override
             public void run() {
-                if(!wifi_manager_.isWifiEnabled()){
-                    wifi_manager_.setWifiEnabled(true);
+                wifi_info_list_.clear();
+                synchronized (this) {
+                    for (String str : scanner_.getLatestScanResult()) {
+                        wifi_info_list_.add(str);
+                    }
                 }
-                wifi_manager_.startScan();
+                adapter_.notifyDataSetChanged();
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        scan_counter_ += 1;
-                        info_textview_.setText("Scan: " + String.valueOf(scan_counter_));
-                        Toast.makeText(getApplicationContext(), "Scanning...", Toast.LENGTH_SHORT).show();
+                        info_textview_.setText("Scan: " + String.valueOf(scanner_.getRecordCount()));
                     }
                 });
-                if(is_scanning_.get()){
-                    mScanHandler.postDelayed(this, scan_interval_);
-                }
             }
         };
+
+        scanner_ = new PeriodicScan(this, scanner_callback);
+        scan_receiver_ref_ = scanner_.getBroadcastReceiver();
+        wifi_manager_ref_ = scanner_.getWifiManager();
     }
 
     private void initializeWifi(){
-        if(!wifi_manager_.isWifiEnabled()){
+        if(!wifi_manager_ref_.isWifiEnabled()){
             new AlertDialog.Builder(MainActivity.this)
                     .setTitle("Wifi is not enable. Click 'OK' to enable")
                     .setCancelable(false)
                     .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
-                            wifi_manager_.setWifiEnabled(true);
+                            wifi_manager_ref_.setWifiEnabled(true);
                         }
                     }).show();
         }
-        registerReceiver(scan_receiver_, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+        registerReceiver(scan_receiver_ref_, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
     }
 
     public void onStartStopClicked(View view){
         if(is_scanning_.get()){
-            mScanHandler.removeCallbacks(null);
+            scanner_.terminate();
             info_textview_.setText("Scan paused");
             btn_add_.setText("Start");
             is_scanning_.set(false);
         }else {
-            mScanHandler.post(scan_runnable_);
+            scanner_.start();
             info_textview_.setText("Scan initialized");
             btn_add_.setText("Stop");
             is_scanning_.set(true);
@@ -166,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause(){
         super.onPause();
-        unregisterReceiver(scan_receiver_);
+        unregisterReceiver(scan_receiver_ref_);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 

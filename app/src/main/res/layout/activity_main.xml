@@ -15,13 +15,15 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
-            />
+            android:layout_above="@+id/linearLayout" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:id="@+id/linearLayout"
             android:layout_alignParentBottom="true"
-            android:orientation="horizontal">
+            android:layout_alignParentStart="true">
 
             <Button
                 android:id="@+id/btn_add"
@@ -34,7 +36,7 @@
                 android:id="@+id/text_info"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Standby"/>
+                android:text="Standby" />
 
         </LinearLayout>
 
